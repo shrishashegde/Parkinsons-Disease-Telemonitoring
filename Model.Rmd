@@ -1,0 +1,123 @@
+---
+title: "Model"
+author: "Shrisha Hegde"
+date: "12/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Regression Model
+
+We will now build the linear model taking total_UPDRS as response variable.
+
+### Split dataset
+
+Let us split the dataset into test set and training set.
+```{r}
+library(tidyverse)
+library(corrplot)
+library(matrixcalc)
+library(ggplot2)
+library(ggpubr)
+dataSet<-read.csv('parkinsons_updrs.csv',header = TRUE)
+```
+
+```{r}
+library(caTools)
+set.seed(123)
+split = sample.split(dataSet$total_UPDRS, SplitRatio = 0.8)
+training_set = subset(dataSet, split == TRUE)
+test_set = subset(dataSet, split == FALSE)
+```
+
+```{r}
+regressor <- lm(formula = total_UPDRS ~ age + sex + test_time + 
+     motor_UPDRS + Jitter.PPQ5 + JitterPerc + Jitter.RAP + 
+     Jitter.DDP + Shimmer + Shimmer.dB. + Shimmer.APQ3 + 
+     Shimmer.APQ5 + Shimmer.APQ11 + Shimmer.DDA + 
+     NHR + HNR + RPDE + DFA + PPE,
+               data = training_set)
+```
+
+```{r}
+y_pred <- predict(regressor, newdata = test_set[,-1])
+summary(regressor)
+```
+
+```{r}
+library(MASS)
+step <- stepAIC(regressor, direction = "both")
+summary(step)
+step$anova
+```
+
+```{r}
+par(mfrow = c(2,2))
+plot(step, col = "green")
+```
+Residual vs. Fitted values Plot - The plot is almost uniform which explains a good linearlity of the model.
+
+Normal QQ - After looking at this plot we can see that response variable is almost normally distributed as the plot lies almost on the normality line.
+
+Our model has gone through stepwise regression and we have kept only the significant attributes, but as we saw in EDA some variables are not normalised. So let us build another model with log normalization.
+
+```{r}
+step2 <- lm(formula = total_UPDRS ~ log10(age) + sex + test_time + motor_UPDRS +log10(JitterPerc) + log10(Jitter.RAP) + log10(Shimmer) + log10(Shimmer.APQ5) + log10(Shimmer.APQ11)  + HNR + RPDE + DFA + PPE, data = training_set)
+summary(step2)
+```
+
+Here the R squared value and adjusted r squared value are almost same as previous model and now we see that there are some insignificant variables. So let's build another model by removing those insignificant variables.
+
+```{r}
+step3 <- lm(formula = total_UPDRS ~ log10(age) + sex + test_time + motor_UPDRS + log10(Jitter.RAP) + log10(Shimmer) + log10(Shimmer.APQ5) + log10(Shimmer.APQ11) + RPDE + DFA + PPE, data = training_set)
+summary(step3)
+par(mfrow = c(2,2))
+plot(step3, col = "green")
+```
+Again we see that R squared value and adjusted R squared has not changed much. But we see that there is improvement in Residuals vs Leverage plot as most of the points lie with in the cook's distance meaning lesser number of data points are treated as outlier.  Residual vs. Fitted values plot of this model is looking more uniform than the previous models.
+
+Let us check the multicollinearity.
+```{r}
+library(car)
+vif(step3)
+```
+If Variance Inflation Factor is greater than 1/(1-R2) where R2 is multi R-squared value of the model then that predictor is related to other predictors than it is to the response. for this model R2 = 0.9 so 1/(1-R2) becomes 10. So Shimmer, Shimmer.APQ5, Shimmer.APQ11 are the predictors that are dependent on other predictors. As these variables are not multicollinear, we can drop these predictors and fit the model.
+
+```{r}
+step4 <- lm(formula = total_UPDRS ~ log10(age) + sex + test_time + motor_UPDRS + log10(Jitter.RAP) + RPDE + DFA + PPE, data = training_set)
+y_step4 = predict(step4, newdata = test_set)
+((sum(y_step4 - test_set[6])**2)/length(y_step4))**0.5
+summary(step4)
+vif(step4)
+par(mfrow = c(2,2))
+plot(step4, col = "green")
+```
+
+Multi R squared is around 0.9 and 1/(1-R2) is still 10 and as we see all over predictors have VIF lower than 10. This means we have met the multicollinearity of predictors for using linear regression.
+
+Finally let us do PCA on the complete dataset and try to see if model after PCA or model from stepwise regression is better. Let us do their comparison on adjusted R squared values and RMSE on the test dataset.
+
+```{r}
+covMatrix<-cov(dataSet[,-6])
+e<-eigen(covMatrix)
+PVE <- e$values/sum(e$values)
+plot(cumsum(PVE), type = 'l')
+```
+We see that 5 principle components represent more than 98% of the variance in data. So it would be safe to drop other less significant principle components without any risk of loosing data.
+
+```{r}
+library(pcr)
+library(stats)
+library(pls)
+pcaReg <-pcr(total_UPDRS ~ age + sex + test_time + 
+     motor_UPDRS + Jitter.PPQ5 + JitterPerc + Jitter.RAP + 
+     Jitter.DDP + Shimmer + Shimmer.dB. + Shimmer.APQ3 + 
+     Shimmer.APQ5 + Shimmer.APQ11 + Shimmer.DDA + 
+     NHR + HNR + RPDE + DFA + PPE, data = training_set, ncomp =5, validation='CV')
+pred = predict(pcaReg, ncomp = 5, newdata = test_set)
+(sum(pred - test_set[6])**2/length(pred))**0.5
+```
+The step wise regression model gave the RMSE of 0.6 and regression model after Principal Component Analysis(PCA) is giving us RMSE of 0.4. So for this model regression model after PCA is giving better result compared to regression model.

@@ -1,0 +1,97 @@
+---
+title: "EDA"
+author: "Shrisha Hegde"
+date: "11/29/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exploratory Data Analysis
+
+In this section let us have a brief understanding of the data and fix any anomalies if any.
+
+Let us first import the required libraries and dataset for this project.
+
+```{r}
+library(tidyverse)
+library(corrplot)
+library(matrixcalc)
+library(ggplot2)
+library(ggpubr)
+dataSet<-read.csv('parkinsons_updrs.csv',header = TRUE)
+dataSet<-as_tibble(dataSet)
+```
+
+First let us see fi there are any NULL values in our dataset.
+
+```{r}
+apply(dataSet, 2, function(x) any(is.na(x)))
+```
+The result contains False for all the columns. So, there are no missing data in our dataset.
+
+Now lets see the summary of the dataset to understand how the data is spread in each column.
+```{r}
+summary(dataSet)
+```
+
+The highest range is by test_time. We might have to normalize it before working on this data or before fitting any model.
+
+Let us have a look at the histogram of the total_UPDRS which is our response variable.
+
+```{r, fig.align = 'center'}
+gg_b <- ggplot_build(
+  ggplot() + geom_histogram(aes(x = dataSet$total_UPDRS))
+)
+hist(dataSet$total_UPDRS, xlab="total_UPDRS",main="Histogram of total_UPDRS", col = rainbow(dim(gg_b$data[[1]])[1]))
+```
+
+It seems to be normally distributed and that is a good thing for the model. Otherwise, transformations or other changes would have been required to normalize the dependent variable ‘total_UPDRS’.
+
+```{r, fig.align = 'center'}
+par(mfrow = c(3,3))
+hist(dataSet$age, xlab="age",main="Histogram of age", col = rainbow(dim(gg_b$data[[1]])[1]))
+hist(dataSet$test_time, xlab="test_time",main="Histogram of test_time", col = rainbow(dim(gg_b$data[[1]])[1]))
+hist(dataSet$motor_UPDRS, xlab="motor_UPDRS",main="Histogram of motor_UPDRS", col = rainbow(dim(gg_b$data[[1]])[1]))
+hist(dataSet$JitterPerc, xlab="JitterPerc",main="Histogram of JitterPerc", col = rainbow(dim(gg_b$data[[1]])[1]))
+hist(dataSet$Shimmer, xlab="Shimmer",main="Histogram of Shimmer", col = rainbow(dim(gg_b$data[[1]])[1]))
+hist(dataSet$NHR, xlab="NHR",main="Histogram of NHR", col = rainbow(dim(gg_b$data[[1]])[1]))
+hist(dataSet$RPDE, xlab="RPDE",main="Histogram of RPDE", col = rainbow(dim(gg_b$data[[1]])[1]))
+hist(dataSet$DFA, xlab="DFA",main="Histogram of DFA", col = rainbow(dim(gg_b$data[[1]])[1]))
+hist(dataSet$PPE, xlab="PPE",main="Histogram of PPE", col = rainbow(dim(gg_b$data[[1]])[1]))
+```
+
+From all the observed histograms, it can be concluded that only ‘RPDE’ and ‘PPE’ have the normalized data. ‘JitterPerc’, ‘Shimmer’ and ‘NHR’ have very unnormalized data. It can be improved by transforming these varaibles.
+
+We plotted Histogram to get the sense of the response variable and the covariates but Histograms can not be a very reliable method for determining the shape of a distribution because it is so strongly affected by the number of bins used. Thus we can use the kernel density plots instead which are more effective ways to view the distribution of a variable
+```{r, fig.align = 'center'}
+ggplot(dataSet, aes(total_UPDRS)) + geom_density(color = "blue", fill= "light green") 
+```
+Density plot of ‘total_UPDRS’ is showing that it is almost normalized variable but not fully normalized. Let’s plot the density plots for the covariates to get more sense of the variables
+```{r, fig.align = 'center'}
+par(mfrow = c(3,3))
+p1<-ggplot(dataSet, aes(age)) + geom_density(color = "blue", fill= "light green")
+p2<-ggplot(dataSet, aes(test_time)) + geom_density(color = "blue", fill= "light green")
+p3<-ggplot(dataSet, aes(motor_UPDRS)) + geom_density(color = "blue", fill= "light green")
+p4<-ggplot(dataSet, aes(JitterPerc)) + geom_density(color = "blue", fill= "light green")
+p5<-ggplot(dataSet, aes(Shimmer)) + geom_density(color = "blue", fill= "light green")
+p6<-ggplot(dataSet, aes(NHR)) + geom_density(color = "blue", fill= "light green")
+p7<-ggplot(dataSet, aes(RPDE)) + geom_density(color = "blue", fill= "light green")
+p8<-ggplot(dataSet, aes(DFA)) + geom_density(color = "blue", fill= "light green")
+p9<-ggplot(dataSet, aes(PPE)) + geom_density(color = "blue", fill= "light green")
+ggarrange(p1, p2, p3, p4,p5, p6,p7, p8, p9,nrow = 3, ncol=3)
+```
+
+As density plot is also showing that ‘RPDE’, ‘PPE’ have normalized data but not for ‘motor_UPDRS’ which it couldn’t be visible accurately in the Histogram plot.
+
+‘JitterPerc’, ‘Shimmer’ and ‘NHR’ have very unnormalized data. It can be improved by transforming these variables.
+
+Now let us see if there are any correlation among the data by plotting heat map of all the variables.
+
+```{r, fig.align = 'center'}
+corMatrix = cor(dataSet)
+corrplot(corMatrix, method = "circle")
+```
+From the heat map we see that 'total_UPDRS' has correlation with only 'motor_UPDRS'.  If we try to  build a model using these two variables, then the model will have an bias induced into the estimates of coefficients and variance of predicted response and it is not the intention. So, other variables are required to correlate with the response variable and that can be done by improving the model created by these covariates. We will proceed by creating a model using ‘total_UPDRS’ as the response variable and other variables as predictor variables.
